@@ -6,7 +6,7 @@ authors = ["drose <david@drose.io>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.10"
 langchain = "^0.2.9"
 langgraph = "^0.1.9"
 langchain-openai = "^0.1.17"
