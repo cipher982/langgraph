@@ -70,3 +70,7 @@ graph.set_entry_point("agent1_node")
 
 # Compile the graph
 compiled_graph = graph.compile()
+
+if __name__ == "__main__":
+    print(create_meme("grumpy cat")) 
+
