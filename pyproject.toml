@@ -4,11 +4,12 @@ version = "0.1.0"
 description = ""
 authors = ["drose <david@drose.io>"]
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.10"
 langchain = "^0.2.9"
-langgraph = "^0.1.9"
+langgraph = "^0.1.0"
 langchain-openai = "^0.1.17"
 
 [build-system]
