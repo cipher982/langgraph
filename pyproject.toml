@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "meme-maker"
 version = "0.1.0"
-description = ""
+description = "makes memes with AI agents"
 authors = ["drose <david@drose.io>"]
 readme = "README.md"
 packages = [{include = "meme-maker"}]
