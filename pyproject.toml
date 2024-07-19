@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "graph-test"
+name = "meme-maker"
 version = "0.1.0"
 description = ""
 authors = ["drose <david@drose.io>"]
