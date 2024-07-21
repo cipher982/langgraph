@@ -30,7 +30,7 @@ class GraphConfig(TypedDict):
     temperature: float
     max_tokens: int
 
-def agent1_node(state: AgentState, config: GraphConfig) -> dict:
+def agent1_node(state: AgentState, config: GraphConfig) -> AgentState:
     messages = state["messages"]
     model = _get_model(config["model_name"], config["temperature"], config["max_tokens"])
     
@@ -39,43 +39,35 @@ def agent1_node(state: AgentState, config: GraphConfig) -> dict:
         prompt = f"We're creating a meme about {human_message}. Let's brainstorm some funny ideas. What do you suggest?"
     else:
         last_message = messages[-1].content
-        if "FINAL_MEME" in last_message:
-            return {"messages": [AIMessage(content="Great job! We've completed our meme.")]}
         prompt = f"Based on our previous discussion, let's continue developing our meme idea. {last_message}"
     
     response = model.invoke([HumanMessage(content=prompt)])
     logger.info(f"Agent 1: {response.content}")
-    return {"messages": [AIMessage(content=response.content)]}
+    return {"messages": state["messages"] + [AIMessage(content=response.content)]}
 
-def agent2_node(state: AgentState, config: GraphConfig) -> dict:
+def agent2_node(state: AgentState, config: GraphConfig) -> AgentState:
     messages = state["messages"]
     model = _get_model(config["model_name"], config["temperature"], config["max_tokens"])
     last_message = messages[-1].content
     
-    if "template" in last_message.lower():
-        prompt = "Great template idea! Now let's finalize our meme. Write out the final joke and describe the image. Start your response with 'FINAL_MEME:'"
+    if "FINAL_MEME:" not in last_message:
+        prompt = f"Great ideas! Now, let's finalize our meme. Create a funny meme based on our discussion about {messages[0].content}. Start your response with 'FINAL_MEME:'"
     else:
-        prompt = f"I like your ideas! Let's build on them. Can you suggest a meme template that would work well with our {messages[0].content} theme?"
+        prompt = "The meme is complete. Let's end the process."
     
     response = model.invoke([HumanMessage(content=prompt)])
     logger.info(f"Agent 2: {response.content}")
-    return {"messages": [AIMessage(content=response.content)]}
+    return {"messages": state["messages"] + [AIMessage(content=response.content)]}
 
-def should_continue(state: AgentState) -> str:
+def should_continue(state: AgentState) -> Literal["agent1", "agent2", "end"]:
     messages = state["messages"]
     last_message = messages[-1].content
-    if last_message.strip().startswith("FINAL_MEME:"):
+    if "FINAL_MEME:" in last_message:
+        logger.info("FINAL_MEME detected. Ending meme creation process.")
         return "end"
-    return "agent1" if messages[-1].type == "ai" and not messages[-1].content.startswith("Agent 1:") else "agent2"
+    logger.info("Continuing meme creation process")
+    return "agent1" if len(messages) % 2 == 0 else "agent2"
 
-workflow = StateGraph(AgentState, config_schema=GraphConfig)
-workflow.add_node("agent1", agent1_node)
-workflow.add_node("agent2", agent2_node)
-workflow.set_entry_point("agent1")
-workflow.add_conditional_edges("agent1", should_continue, {"agent2": "agent2", "end": END})
-workflow.add_conditional_edges("agent2", should_continue, {"agent1": "agent1", "end": END})
-
-graph = workflow.compile()
 
 def create_meme(topic: str) -> str:
     config = {
@@ -84,14 +76,37 @@ def create_meme(topic: str) -> str:
         "max_tokens": 150
     }
     try:
+        logger.info(f"Starting meme creation for topic: {topic}")
         result = graph.invoke({"messages": [HumanMessage(content=topic)]}, config=config)
-        final_messages = [msg for msg in result["messages"] if msg.content.strip().startswith("FINAL_MEME:")]
-        if not final_messages:
-            raise ValueError("No final meme was generated.")
-        return final_messages[-1].content.split("FINAL_MEME:", 1)[-1].strip()
+        logger.info(f"Graph execution completed. Result: {result}")
+        for i, msg in enumerate(result["messages"]):
+            logger.info(f"Message {i}: {msg.content[:50]}...")
+            if "FINAL_MEME:" in msg.content:
+                logger.info("FINAL_MEME found. Stopping process.")
+                return msg.content.split("FINAL_MEME:", 1)[-1].strip()
+        logger.warning("No final meme was generated.")
+        return "No final meme was generated. The process may have ended prematurely."
     except Exception as e:
-        logger.error(f"Error creating meme: {str(e)}")
-        return f"Error: {str(e)}"
+        logger.error(f"Error creating meme: {str(e)}", exc_info=True)
+        return f"Error creating meme: {str(e)}"
+    
+
+workflow = StateGraph(AgentState, config_schema=GraphConfig)
+workflow.add_node("agent1", agent1_node)
+workflow.add_node("agent2", agent2_node)
+workflow.set_entry_point("agent1")
+for agent in ["agent1", "agent2"]:
+    workflow.add_conditional_edges(
+        agent,
+        should_continue,
+        {
+            "agent1": "agent1",
+            "agent2": "agent2",
+            "end": END,
+        }
+    )
+graph = workflow.compile()
+
 
 if __name__ == "__main__":
     topic = "grumpy cat"
