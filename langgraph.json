@@ -1,7 +1,7 @@
 {
     "dependencies": ["."],
     "graphs": {
-      "agent": "./meme-maker/main.py:compiled_graph"
+      "agent": "./meme-maker/main.py:graph"
     },
     "env": ".env"
   }
