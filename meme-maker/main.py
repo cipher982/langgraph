@@ -19,7 +19,7 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 tools = []
 
 @lru_cache(maxsize=2)
-def _get_model(model_name: str = "gpt-3.5-turbo", temperature: float = 0.7, max_tokens: int = 150) -> ChatOpenAI:
+def _get_model(model_name: str = "gpt-4o-mini", temperature: float = 0.7, max_tokens: int = 150) -> ChatOpenAI:
     model = ChatOpenAI(
         model=model_name,
         temperature=temperature,
@@ -33,13 +33,22 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 class GraphConfig(TypedDict):
-    model_name: Literal["gpt-3.5-turbo", "gpt-4"]
+    model_name: str
     temperature: float
     max_tokens: int
 
+def get_config(config: GraphConfig) -> GraphConfig:
+    defaults = {
+        "model_name": "gpt-4-0125-preview",
+        "temperature": 0.7,
+        "max_tokens": 150
+    }
+    return {**defaults, **config}
+
 def agent1_node(state: AgentState, config: GraphConfig) -> AgentState:
     messages = state["messages"]
-    model = _get_model(config["model_name"], config["temperature"], config["max_tokens"])
+    full_config = get_config(config)
+    model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
     
     if len(messages) == 1:  # Initial prompt
         human_message = messages[0].content
@@ -54,7 +63,8 @@ def agent1_node(state: AgentState, config: GraphConfig) -> AgentState:
 
 def agent2_node(state: AgentState, config: GraphConfig) -> AgentState:
     messages = state["messages"]
-    model = _get_model(config["model_name"], config["temperature"], config["max_tokens"])
+    full_config = get_config(config)
+    model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
     last_message = messages[-1].content
     
     if "FINAL_MEME:" not in last_message:
@@ -108,6 +118,5 @@ graph = workflow.compile()
 
 if __name__ == "__main__":
     topic = "Always Sunny in Philadelphia"
-    config = {"model_name": "gpt-3.5-turbo", "temperature": 0.7, "max_tokens": 150}
-    result = graph.invoke({"messages": [HumanMessage(content=topic)]}, config=config)
+    result = graph.invoke({"messages": [HumanMessage(content=topic)]})
     logger.info(f"Meme for '{topic}': {result['messages'][-1].content}")
