@@ -4,7 +4,6 @@ from typing import TypedDict, Annotated, Sequence, Literal
 from functools import lru_cache
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END, add_messages
 
