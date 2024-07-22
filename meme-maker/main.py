@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 @lru_cache(maxsize=2)
-def _get_model(model_name: str, temperature: float = 0.7, max_tokens: int = 150) -> ChatOpenAI:
+def _get_model(model_name: str = "gpt-3.5-turbo", temperature: float = 0.7, max_tokens: int = 150) -> ChatOpenAI:
     return ChatOpenAI(
         model=model_name,
         temperature=temperature,
@@ -30,9 +30,9 @@ class GraphConfig(TypedDict):
     temperature: float
     max_tokens: int
 
-def agent1_node(state: AgentState, config: GraphConfig) -> AgentState:
+def agent1_node(state: AgentState) -> AgentState:
     messages = state["messages"]
-    model = _get_model(config["model_name"], config["temperature"], config["max_tokens"])
+    model = _get_model()
     
     if len(messages) == 1:  # Initial prompt
         human_message = messages[0].content
@@ -45,9 +45,9 @@ def agent1_node(state: AgentState, config: GraphConfig) -> AgentState:
     logger.info(f"Agent 1: {response.content}")
     return {"messages": state["messages"] + [AIMessage(content=response.content)]}
 
-def agent2_node(state: AgentState, config: GraphConfig) -> AgentState:
+def agent2_node(state: AgentState) -> AgentState:
     messages = state["messages"]
-    model = _get_model(config["model_name"], config["temperature"], config["max_tokens"])
+    model = _get_model()
     last_message = messages[-1].content
     
     if "FINAL_MEME:" not in last_message:
@@ -59,6 +59,7 @@ def agent2_node(state: AgentState, config: GraphConfig) -> AgentState:
     logger.info(f"Agent 2: {response.content}")
     return {"messages": state["messages"] + [AIMessage(content=response.content)]}
 
+
 def should_continue(state: AgentState) -> Literal["agent1", "agent2", "end"]:
     messages = state["messages"]
     last_message = messages[-1].content
@@ -67,29 +68,6 @@ def should_continue(state: AgentState) -> Literal["agent1", "agent2", "end"]:
         return "end"
     logger.info("Continuing meme creation process")
     return "agent1" if len(messages) % 2 == 0 else "agent2"
-
-
-def create_meme(topic: str) -> str:
-    config = {
-        "model_name": "gpt-4o-mini",
-        "temperature": 0.7,
-        "max_tokens": 150
-    }
-    try:
-        logger.info(f"Starting meme creation for topic: {topic}")
-        result = graph.invoke({"messages": [HumanMessage(content=topic)]}, config=config)
-        logger.info(f"Graph execution completed. Result: {result}")
-        for i, msg in enumerate(result["messages"]):
-            logger.info(f"Message {i}: {msg.content[:50]}...")
-            if "FINAL_MEME:" in msg.content:
-                logger.info("FINAL_MEME found. Stopping process.")
-                return msg.content.split("FINAL_MEME:", 1)[-1].strip()
-        logger.warning("No final meme was generated.")
-        return "No final meme was generated. The process may have ended prematurely."
-    except Exception as e:
-        logger.error(f"Error creating meme: {str(e)}", exc_info=True)
-        return f"Error creating meme: {str(e)}"
-    
 
 workflow = StateGraph(AgentState, config_schema=GraphConfig)
 workflow.add_node("agent1", agent1_node)
@@ -107,8 +85,7 @@ for agent in ["agent1", "agent2"]:
     )
 graph = workflow.compile()
 
-
 if __name__ == "__main__":
     topic = "grumpy cat"
-    meme = create_meme(topic)
-    logger.info(f"Meme for '{topic}': {meme}")
+    result = graph.invoke({"messages": [HumanMessage(content=topic)]})
+    logger.info(f"Meme for '{topic}': {result['messages'][-1].content}")
