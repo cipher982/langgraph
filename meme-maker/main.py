@@ -19,7 +19,7 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 tools = []
 
 @lru_cache(maxsize=2)
-def _get_model(model_name: str = "gpt-4o-mini", temperature: float = 0.7, max_tokens: int = 150) -> ChatOpenAI:
+def _get_model(model_name: str,temperature: float, max_tokens: int) -> ChatOpenAI:
     model = ChatOpenAI(
         model=model_name,
         temperature=temperature,
@@ -39,9 +39,9 @@ class GraphConfig(TypedDict):
 
 def get_config(config: GraphConfig) -> GraphConfig:
     defaults = {
-        "model_name": "gpt-4-0125-preview",
-        "temperature": 0.7,
-        "max_tokens": 150
+        "model_name": "gpt-4o-mini",
+        "temperature": 0.9,
+        "max_tokens": 256,
     }
     return {**defaults, **config}
 
