@@ -1,11 +1,12 @@
 import os
 import logging
-from typing import TypedDict, Annotated, Sequence, Literal
+from typing import TypedDict, Annotated, Sequence, Literal, List
 from functools import lru_cache
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END, add_messages
+import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -15,100 +16,99 @@ logger = logging.getLogger(__name__)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-# tools = [TavilySearchResults(max_results=1, api_key=TAVILY_API_KEY)]
-tools = []
+tools = []  # Placeholder for future tool integration
 
 @lru_cache(maxsize=2)
-def _get_model(model_name: str,temperature: float, max_tokens: int) -> ChatOpenAI:
-    model = ChatOpenAI(
-        model=model_name,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        openai_api_key=OPENAI_API_KEY
-    )
-    return model
-    # return model.bind_tools(tools)
+def _get_model(model_name: str, temperature: float, max_tokens: int) -> ChatOpenAI:
+    try:
+        model = ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            openai_api_key=OPENAI_API_KEY
+        )
+        return model
+    except Exception as e:
+        logger.error(f"Error creating model: {e}")
+        raise
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
+    turn_count: int
 
 class GraphConfig(TypedDict):
     model_name: str
     temperature: float
     max_tokens: int
+    max_turns: int
 
 def get_config(config: GraphConfig) -> GraphConfig:
     defaults = {
         "model_name": "gpt-4o-mini",
-        "temperature": 0.9,
+        "temperature": 0.7,
         "max_tokens": 256,
+        "max_turns": 5
     }
     return {**defaults, **config}
 
-def agent1_node(state: AgentState, config: GraphConfig) -> AgentState:
+def get_conversation_history(messages: List[BaseMessage], n: int = 3) -> str:
+    return "\n".join([f"{'User' if i == 0 else 'Bob' if i % 2 == 1 else 'Alice'}: {m.content}" for i, m in enumerate(messages[-n:])])
+
+async def bob_node(state: AgentState, config: GraphConfig) -> AgentState:
     messages = state["messages"]
     full_config = get_config(config)
     model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
     
-    if len(messages) == 1:  # Initial prompt
-        human_message = messages[0].content
-        prompt = f"We're creating a meme about {human_message}. Let's search for some information and brainstorm funny ideas. What do you suggest?"
-    else:
-        last_message = messages[-1].content
-        prompt = f"Based on our previous discussion, let's continue developing our meme idea. Use the search tool if needed. {last_message}"
+    history = get_conversation_history(messages)
+    prompt = f"You are Bob, a creative and sometimes unconventional thinker. Your task is to brainstorm innovative and possibly unusual ideas for the following problem, considering the conversation history:\n\n{history}\n\nDon't hold back on creativity!"
     
-    response = model.invoke([HumanMessage(content=prompt)])
-    logger.info(f"Agent 1: {response.content}")
-    return {"messages": state["messages"] + [response]}
+    try:
+        response = await model.ainvoke([HumanMessage(content=prompt)])
+        logger.info(f"Bob: {response.content}")
+        return {"messages": state["messages"] + [response], "turn_count": state["turn_count"] + 1}
+    except Exception as e:
+        logger.error(f"Error in Bob's response: {e}")
+        return state
 
-def agent2_node(state: AgentState, config: GraphConfig) -> AgentState:
+async def alice_node(state: AgentState, config: GraphConfig) -> AgentState:
     messages = state["messages"]
     full_config = get_config(config)
     model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
-    last_message = messages[-1].content
     
-    if "FINAL_MEME:" not in last_message:
-        prompt = f"Great ideas! Now, let's finalize our meme. Create a funny meme based on our discussion about {messages[0].content}. Use the search tool if needed for additional context or inspiration. Start your response with 'FINAL_MEME:'"
+    history = get_conversation_history(messages)
+    prompt = f"You are Alice, a practical and grounded thinker. Your task is to evaluate and refine the ideas proposed in the following conversation, providing a realistic assessment and practical improvements:\n\n{history}"
+    
+    try:
+        response = await model.ainvoke([HumanMessage(content=prompt)])
+        logger.info(f"Alice: {response.content}")
+        return {"messages": state["messages"] + [response], "turn_count": state["turn_count"] + 1}
+    except Exception as e:
+        logger.error(f"Error in Alice's response: {e}")
+        return state
+
+def should_continue(state: AgentState) -> Literal["bob", "alice", "action", "end"]:
+    if state["turn_count"] >= get_config({})["max_turns"]:
+        return "end"
+    if len(state["messages"]) % 2 == 1:
+        return "bob"
     else:
-        prompt = "The meme is complete. Let's end the process."
-    
-    response = model.invoke([HumanMessage(content=prompt)])
-    logger.info(f"Agent 2: {response.content}")
-    return {"messages": state["messages"] + [response]}
+        return "alice"
 
-
-def should_continue(state: AgentState) -> Literal["agent1", "agent2", "action", "end"]:
-    messages = state["messages"]
-    last_message = messages[-1]
-    if isinstance(last_message, AIMessage):
-        if "FINAL_MEME:" in last_message.content:
-            logger.info("FINAL_MEME detected. Ending meme creation process.")
-            return "end"
-        if hasattr(last_message, 'additional_kwargs') and last_message.additional_kwargs.get('tool_calls'):
-            logger.info("Tool call detected. Executing action.")
-            return "action"
-    elif isinstance(last_message, BaseMessage) and last_message.type == "tool":
-        logger.info("Tool message received. Continuing meme creation process.")
-        return "agent1" if len(messages) % 2 == 0 else "agent2"
-    logger.info("Continuing meme creation process")
-    return "agent1" if len(messages) % 2 == 0 else "agent2"
-
-# Define the function to execute tools
 tool_node = ToolNode(tools)
 
 workflow = StateGraph(AgentState, config_schema=GraphConfig)
-workflow.add_node("agent1", agent1_node)
-workflow.add_node("agent2", agent2_node)
+workflow.add_node("bob", bob_node)
+workflow.add_node("alice", alice_node)
 workflow.add_node("action", tool_node)
-workflow.set_entry_point("agent1")
+workflow.set_entry_point("bob")
 
-for agent in ["agent1", "agent2", "action"]:
+for agent in ["bob", "alice", "action"]:
     workflow.add_conditional_edges(
         agent,
         should_continue,
         {
-            "agent1": "agent1",
-            "agent2": "agent2",
+            "bob": "bob",
+            "alice": "alice",
             "action": "action",
             "end": END,
         }
@@ -116,7 +116,37 @@ for agent in ["agent1", "agent2", "action"]:
 
 graph = workflow.compile()
 
+async def run_conversation(task: str):
+    try:
+        result = await graph.ainvoke({"messages": [HumanMessage(content=task)], "turn_count": 0})
+        return result["messages"]
+    except Exception as e:
+        logger.error(f"Error in conversation: {e}")
+        return []
+
+async def main():
+    while True:
+        task = input("Enter your task or question (or 'quit' to exit): ")
+        if task.lower() == 'quit':
+            break
+        
+        conversation = await run_conversation(task)
+        
+        print("\nConversation:")
+        for i, message in enumerate(conversation):
+            if i == 0:
+                print(f"User: {message.content}")
+            elif i % 2 == 1:
+                print(f"Bob: {message.content}")
+            else:
+                print(f"Alice: {message.content}")
+        
+        print("\nFinal suggestion:")
+        print(conversation[-1].content)
+        
+        follow_up = input("Do you have any follow-up questions? (yes/no): ")
+        if follow_up.lower() != 'yes':
+            break
+
 if __name__ == "__main__":
-    topic = "Always Sunny in Philadelphia"
-    result = graph.invoke({"messages": [HumanMessage(content=topic)]})
-    logger.info(f"Meme for '{topic}': {result['messages'][-1].content}")
+    asyncio.run(main())
