@@ -60,7 +60,7 @@ async def bob_node(state: AgentState, config: GraphConfig) -> AgentState:
     model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
     
     history = get_conversation_history(messages)
-    prompt = f"You are Bob, a creative and sometimes unconventional thinker. Your task is to brainstorm innovative and possibly unusual ideas for the following problem, considering the conversation history:\n\n{history}\n\nDon't hold back on creativity!"
+    prompt = f"You are Bob, a mad scientist, a whacky and sometimes unconventional thinker. Your task is to brainstorm innovative and possibly unusual ideas for the following problem, considering the conversation history:\n\n{history}\n\nDon't hold back on creativity!"
     
     try:
         response = await model.ainvoke([HumanMessage(content=prompt)])
@@ -76,7 +76,7 @@ async def alice_node(state: AgentState, config: GraphConfig) -> AgentState:
     model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
     
     history = get_conversation_history(messages)
-    prompt = f"You are Alice, a practical and grounded thinker. Your task is to evaluate and refine the ideas proposed in the following conversation, providing a realistic assessment and practical improvements:\n\n{history}"
+    prompt = f"You are Alice, the assistant, a practical and grounded thinker. Your task is to evaluate and refine the ideas proposed in the following conversation, providing a realistic assessment and practical improvements:\n\n{history}"
     
     try:
         response = await model.ainvoke([HumanMessage(content=prompt)])
