@@ -44,7 +44,7 @@ class GraphConfig(TypedDict):
 
 def get_config(config: GraphConfig) -> GraphConfig:
     defaults = {
-        "model_name": "gpt-4o-mini",
+        "model_name": "gpt-4o-mini", # dont change this
         "temperature": 0.7,
         "max_tokens": 256,
         "max_turns": 5
@@ -54,13 +54,14 @@ def get_config(config: GraphConfig) -> GraphConfig:
 def get_conversation_history(messages: List[BaseMessage], n: int = 3) -> str:
     return "\n".join([f"{'User' if i == 0 else 'Bob' if i % 2 == 1 else 'Alice'}: {m.content}" for i, m in enumerate(messages[-n:])])
 
+
 async def bob_node(state: AgentState, config: GraphConfig) -> AgentState:
     messages = state["messages"]
     full_config = get_config(config)
     model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
     
     history = get_conversation_history(messages)
-    prompt = f"You are Bob, a mad scientist, a whacky and sometimes unconventional thinker. Your task is to brainstorm innovative and possibly unusual ideas for the following problem, considering the conversation history:\n\n{history}\n\nDon't hold back on creativity!"
+    prompt = f"You are Bob, a mad scientist that thinks unconventionally. Your task is to work with Alice to brainstorm innovative and possibly unusual ideas for the following problem, considering the conversation history:\n\n{history}\n\nDon't hold back on creativity!"
     
     try:
         response = await model.ainvoke([HumanMessage(content=prompt)])
@@ -76,7 +77,7 @@ async def alice_node(state: AgentState, config: GraphConfig) -> AgentState:
     model = _get_model(full_config["model_name"], full_config["temperature"], full_config["max_tokens"])
     
     history = get_conversation_history(messages)
-    prompt = f"You are Alice, the assistant, a practical and grounded thinker. Your task is to evaluate and refine the ideas proposed in the following conversation, providing a realistic assessment and practical improvements:\n\n{history}"
+    prompt = f"You are Alice, a practical and grounded thinker and bobs assistant. Your task is to evaluate and refine the ideas proposed in the following conversation, providing a realistic assessment and practical improvements:\n\n{history}"
     
     try:
         response = await model.ainvoke([HumanMessage(content=prompt)])
@@ -86,6 +87,7 @@ async def alice_node(state: AgentState, config: GraphConfig) -> AgentState:
         logger.error(f"Error in Alice's response: {e}")
         return state
 
+
 def should_continue(state: AgentState) -> Literal["bob", "alice", "action", "end"]:
     if state["turn_count"] >= get_config({})["max_turns"]:
         return "end"
@@ -93,6 +95,7 @@ def should_continue(state: AgentState) -> Literal["bob", "alice", "action", "end
         return "bob"
     else:
         return "alice"
+
 
 tool_node = ToolNode(tools)
 
@@ -116,6 +119,8 @@ for agent in ["bob", "alice", "action"]:
 
 graph = workflow.compile()
 
+
+## Running the graph locally
 async def run_conversation(task: str):
     try:
         result = await graph.ainvoke({"messages": [HumanMessage(content=task)], "turn_count": 0})
@@ -123,6 +128,7 @@ async def run_conversation(task: str):
     except Exception as e:
         logger.error(f"Error in conversation: {e}")
         return []
+
 
 async def main():
     while True:
@@ -147,6 +153,7 @@ async def main():
         follow_up = input("Do you have any follow-up questions? (yes/no): ")
         if follow_up.lower() != 'yes':
             break
+
 
 if __name__ == "__main__":
     asyncio.run(main())
