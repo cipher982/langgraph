@@ -65,7 +65,7 @@ async def bob_node(state: AgentState, config: GraphConfig) -> AgentState:
     
     try:
         response = await model.ainvoke([HumanMessage(content=prompt)])
-        logger.info(f"Bob: {response.content}")
+        logger.info(f"(Bob) {response.content}")
         return {"messages": state["messages"] + [response], "turn_count": state["turn_count"] + 1}
     except Exception as e:
         logger.error(f"Error in Bob's response: {e}")
@@ -81,7 +81,7 @@ async def alice_node(state: AgentState, config: GraphConfig) -> AgentState:
     
     try:
         response = await model.ainvoke([HumanMessage(content=prompt)])
-        logger.info(f"Alice: {response.content}")
+        logger.info(f"(Alice) {response.content}")
         return {"messages": state["messages"] + [response], "turn_count": state["turn_count"] + 1}
     except Exception as e:
         logger.error(f"Error in Alice's response: {e}")
@@ -136,19 +136,7 @@ async def main():
         if task.lower() == 'quit':
             break
         
-        conversation = await run_conversation(task)
-        
-        print("\nConversation:")
-        for i, message in enumerate(conversation):
-            if i == 0:
-                print(f"User: {message.content}")
-            elif i % 2 == 1:
-                print(f"Bob: {message.content}")
-            else:
-                print(f"Alice: {message.content}")
-        
-        print("\nFinal suggestion:")
-        print(conversation[-1].content)
+        _ = await run_conversation(task)
         
         follow_up = input("Do you have any follow-up questions? (yes/no): ")
         if follow_up.lower() != 'yes':
